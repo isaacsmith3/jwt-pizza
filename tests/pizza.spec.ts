@@ -43,6 +43,12 @@ async function basicInit(page: Page) {
     await route.fulfill({ json: loginRes });
   });
 
+  // The admin dashboard lists users; keep that request off the real backend.
+  await page.route(/\/api\/user(\?.*)?$/, async (route) => { // /api/user, followed by any query params, but that's it
+    expect(route.request().method()).toBe('GET');
+    await route.fulfill({ json: { users: [], more: false } });
+  });
+
   // Return the currently logged in user
   await page.route('*/**/api/user/me', async (route) => {
     expect(route.request().method()).toBe('GET');
@@ -220,7 +226,7 @@ test('admin login and create franchise, then close it', async ({ page }) => {
   // The admin dashboard lists the existing franchises
   await page.getByRole('link', { name: 'Admin' }).click();
   await expect(page.getByRole('heading', { name: "Mama Ricci's kitchen" })).toBeVisible();
-  await expect(page.getByRole('table')).toContainText('LotaPizza');
+  await expect(page.getByRole('table').first()).toContainText('LotaPizza');
 
   // Add a new one
   await page.getByRole('button', { name: 'Add Franchise' }).click();
@@ -231,7 +237,7 @@ test('admin login and create franchise, then close it', async ({ page }) => {
 
   // Back on the dashboard, it shows up in the table
   await expect(page.getByRole('heading', { name: "Mama Ricci's kitchen" })).toBeVisible();
-  await expect(page.getByRole('table')).toContainText('PizzaPocket');
+  await expect(page.getByRole('table').first()).toContainText('PizzaPocket');
 
   // Poke around the dashboard a bit
   await expect(page.getByRole('columnheader', { name: 'Franchise', exact: true })).toBeVisible();
@@ -245,7 +251,7 @@ test('admin login and create franchise, then close it', async ({ page }) => {
 
   // And then it is gone from the table
   await expect(page.getByRole('heading', { name: "Mama Ricci's kitchen" })).toBeVisible();
-  await expect(page.getByRole('table')).not.toContainText('PizzaPocket');
+  await expect(page.getByRole('table').first()).not.toContainText('PizzaPocket');
 });
 
 test('franchisee creates a store, then closes it', async ({ page }) => {
@@ -260,14 +266,14 @@ test('franchisee creates a store, then closes it', async ({ page }) => {
   // Their franchise dashboard shows the stores they already have
   await page.getByRole('link', { name: 'Franchise' }).first().click();
   await expect(page.getByRole('heading', { name: 'LotaPizza' })).toBeVisible();
-  await expect(page.getByRole('table')).toContainText('Lehi');
+  await expect(page.getByRole('table').first()).toContainText('Lehi');
 
   // Add a store
   await page.getByRole('button', { name: 'Create store' }).click();
   await expect(page.getByRole('heading', { name: 'Create store' })).toBeVisible();
   await page.getByPlaceholder('store name').fill('Orem');
   await page.getByRole('button', { name: 'Create' }).click();
-  await expect(page.getByRole('table')).toContainText('Orem');
+  await expect(page.getByRole('table').first()).toContainText('Orem');
 
   // Close that store again
   await page.getByRole('row', { name: 'Orem' }).getByRole('button', { name: 'Close' }).click();
@@ -276,7 +282,7 @@ test('franchisee creates a store, then closes it', async ({ page }) => {
   await page.getByRole('button', { name: 'Close' }).click();
 
   await expect(page.getByRole('heading', { name: 'LotaPizza' })).toBeVisible();
-  await expect(page.getByRole('table')).not.toContainText('Orem');
+  await expect(page.getByRole('table').first()).not.toContainText('Orem');
 });
 
 test('register then logout', async ({ page }) => {
