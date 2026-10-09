@@ -10,6 +10,9 @@ const allUsers: User[] = [
 
 async function adminInit(page: Page) {
   let loggedInUser: User | undefined;
+  // Per-test copy: the delete test mutates this, and the module-level
+  // fixture is shared by every test in the file.
+  let users: User[] = allUsers.map((u) => ({ ...u }));
   const admin: User = { id: '3', name: 'Ann', email: 'a@jwt.com', password: 'a', roles: [{ role: Role.Admin }] };
 
   await page.route('*/**/api/auth', async (route) => {
@@ -36,10 +39,17 @@ async function adminInit(page: Page) {
     const limit = Number(url.searchParams.get('limit')) || 10;
     const page = Number(url.searchParams.get('page')) || 1;
 
-    const matched = allUsers.filter((u) => u.name!.toLowerCase().includes(nameFilter.toLowerCase()));
+    const matched = users.filter((u) => u.name!.toLowerCase().includes(nameFilter.toLowerCase()));
     const offset = (page - 1) * limit;
-    const users = matched.slice(offset, offset + limit);
-    await route.fulfill({ json: { users, more: matched.length > offset + limit } });
+    await route.fulfill({ json: { users: matched.slice(offset, offset + limit), more: matched.length > offset + limit } });
+  });
+
+  // DELETE /api/user/:id -- digits only, so it never catches /api/user/me
+  await page.route(/\/api\/user\/\d+$/, async (route) => {
+    expect(route.request().method()).toBe('DELETE');
+    const id = route.request().url().split('/').pop();
+    users = users.filter((u) => u.id !== id);
+    await route.fulfill({ json: { message: 'user deleted' } });
   });
 
   await page.goto('/');
@@ -73,4 +83,27 @@ test('admin can filter the user list by name', async ({ page }) => {
 
   await expect(page.getByRole('row').filter({ hasText: 'Frank' })).toBeVisible();
   await expect(page.getByRole('row').filter({ hasText: 'Dan' })).toHaveCount(0);
+});
+
+test('admin can delete a user', async ({ page }) => {
+  await adminInit(page);
+
+  const danRow = page.getByRole('row').filter({ hasText: 'Dan' });
+  await expect(danRow).toBeVisible();
+
+  await danRow.getByRole('button', { name: 'Delete' }).click();
+
+  await expect(page.getByRole('row').filter({ hasText: 'Dan' })).toHaveCount(0);
+  await expect(page.getByRole('row').filter({ hasText: 'Frank' })).toBeVisible();
+});
+
+test('a diner cannot reach the admin dashboard', async ({ page }) => {
+  await page.route('*/**/api/auth', async (route) => {
+    await route.fulfill({ json: { user: { id: '1', name: 'Dan', email: 'd@jwt.com', roles: [{ role: Role.Diner }] }, token: 'abcdef' } });
+  });
+
+  await page.goto('/admin-dashboard');
+
+  await expect(page.getByRole('heading', { name: 'Oops' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Users' })).toHaveCount(0);
 });
