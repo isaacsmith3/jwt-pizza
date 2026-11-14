@@ -10,7 +10,11 @@ export const options = {
     distribution: { 'amazon:us:ashburn': { loadZone: 'amazon:us:ashburn', percent: 100 } },
     name: 'Login and order pizza',
   },
-  thresholds: {},
+  thresholds: {
+    http_req_failed: ['rate<0.01'],
+    http_req_duration: ['p(95)<500'], // 95% of requests finish under 500 ms
+    checks: ['rate>0.99'], // login, purchase, and pizza JWT 
+  },
   scenarios: {
     Scenario_1: {
       executor: 'ramping-vus',
